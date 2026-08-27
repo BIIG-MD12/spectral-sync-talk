@@ -11,7 +11,7 @@ import type {
 } from "@/types";
 import { mockApi } from "./mock-backend";
 
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? "";
+const BASE_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "";
 
 /** When no backend URL is configured we serve deterministic mock data. */
 export const USING_MOCKS = !BASE_URL;
