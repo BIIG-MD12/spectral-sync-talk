@@ -37,7 +37,10 @@ function AuthScreen() {
   const [loading, setLoading] = useState(false);
 
   const requestOtp = async () => {
-    if (!email.includes("@")) return toast.error("Enter a valid email");
+    if (!email.includes("@")) {
+      toast.error("Enter a valid email");
+      return;
+    }
     setLoading(true);
     try {
       const res = await api.auth.emailOtp(email);
