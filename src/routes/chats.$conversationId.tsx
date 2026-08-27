@@ -1,0 +1,161 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, createFileRoute } from "@tanstack/react-router";
+import { AnimatePresence, motion } from "framer-motion";
+import { ChevronLeft, Loader2, Video } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Composer } from "@/components/fluid/Composer";
+import { MessageBubble } from "@/components/fluid/MessageBubble";
+import { useRealtime } from "@/hooks/useRealtime";
+import { api } from "@/lib/api";
+import { CURRENT_USER } from "@/lib/mock-backend";
+import { useAppStore } from "@/store/useAppStore";
+import type { EffectType, Message } from "@/types";
+
+const SPRING = { type: "spring", stiffness: 300, damping: 25 } as const;
+
+export const Route = createFileRoute("/chats/$conversationId")({
+  head: () => ({
+    meta: [
+      { title: "Conversation — FluidTalk" },
+      {
+        name: "description",
+        content:
+          "A FluidTalk conversation with spring-animated bubbles, invisible ink mystery reveal, double-tap reactions and scheduled time capsules.",
+      },
+      { property: "og:title", content: "Conversation — FluidTalk" },
+      {
+        property: "og:description",
+        content: "Invisible ink, reactions and time capsules in a premium dark chat room.",
+      },
+    ],
+  }),
+  component: ChatRoom,
+});
+
+function ChatRoom() {
+  const { conversationId } = Route.useParams();
+  const queryClient = useQueryClient();
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [localReactions, setLocalReactions] = useState<Record<string, string>>({});
+
+  const setActiveConversation = useAppStore((s) => s.setActiveConversation);
+  const currentUser = useAppStore((s) => s.user);
+  const myId = currentUser?.id ?? CURRENT_USER.id;
+
+  useEffect(() => {
+    setActiveConversation(conversationId);
+    return () => setActiveConversation(null);
+  }, [conversationId, setActiveConversation]);
+
+  useRealtime(conversationId, {
+    onMessage: () => queryClient.invalidateQueries({ queryKey: ["messages", conversationId] }),
+  });
+
+  const { data: conversation } = useQuery({
+    queryKey: ["conversation", conversationId],
+    queryFn: () => api.conversations.get(conversationId),
+  });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["messages", conversationId],
+    queryFn: () => api.conversations.messages(conversationId),
+  });
+
+  const messages = useMemo(() => data?.messages ?? [], [data]);
+  const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+  const nameFor = (id: string) =>
+    conversation?.participants?.find((p) => p.id === id)?.display_name ?? "Member";
+
+  const send = useMutation({
+    mutationFn: ({
+      content,
+      effect,
+      scheduledAt,
+    }: {
+      content: string;
+      effect: EffectType;
+      scheduledAt: string | null;
+    }) =>
+      api.conversations.sendMessage(conversationId, {
+        content,
+        effect_type: effect,
+        reply_to_id: replyTo?.id ?? null,
+        scheduled_at: scheduledAt,
+      }),
+    onSuccess: () => {
+      setReplyTo(null);
+      queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
+
+  return (
+    <main className="relative flex min-h-screen flex-col bg-background">
+      <div className="halo pointer-events-none absolute inset-x-0 top-0 h-64" />
+
+      <motion.header
+        initial={{ opacity: 0, y: -16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={SPRING}
+        className="glass-strong sticky top-0 z-20 flex items-center gap-3 px-3 py-3"
+      >
+        <Link to="/chats" className="grid size-9 place-items-center rounded-full bg-glass">
+          <ChevronLeft className="size-5" />
+        </Link>
+        <div className="grid size-9 place-items-center rounded-full bg-primary/20 text-[13px] font-semibold text-primary">
+          {(conversation?.title ?? "?").slice(0, 1)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-medium">{conversation?.title ?? "Loading…"}</p>
+          <p className="text-[12px] text-muted-foreground">
+            {conversation?.is_group ? `${conversation.participants?.length ?? 0} people` : "Active now"}
+          </p>
+        </div>
+        <button className="grid size-9 place-items-center rounded-full bg-glass text-muted-foreground">
+          <Video className="size-[18px]" />
+        </button>
+      </motion.header>
+
+      <div className="relative z-10 flex-1 space-y-3 overflow-y-auto py-5">
+        {isLoading && (
+          <div className="flex justify-center py-16">
+            <Loader2 className="size-5 animate-spin text-primary" />
+          </div>
+        )}
+        <AnimatePresence initial={false}>
+          {messages.map((m, i) => {
+            const reaction = localReactions[m.id];
+            return (
+              <MessageBubble
+                key={m.id}
+                index={i}
+                message={
+                  reaction
+                    ? { ...m, reactions: [...(m.reactions ?? []), { emoji: reaction, user_id: myId }] }
+                    : m
+                }
+                mine={m.sender_id === myId}
+                senderName={conversation?.is_group ? nameFor(m.sender_id) : undefined}
+                replyTo={m.reply_to_id ? (byId.get(m.reply_to_id) ?? null) : null}
+                onReact={(id, emoji) => setLocalReactions((r) => ({ ...r, [id]: emoji }))}
+                onReply={setReplyTo}
+              />
+            );
+          })}
+        </AnimatePresence>
+        <div ref={bottomRef} />
+      </div>
+
+      <Composer
+        replyTo={replyTo}
+        onCancelReply={() => setReplyTo(null)}
+        onSend={(content, effect, scheduledAt) => send.mutate({ content, effect, scheduledAt })}
+      />
+    </main>
+  );
+}
