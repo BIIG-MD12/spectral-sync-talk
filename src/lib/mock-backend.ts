@@ -229,3 +229,203 @@ export const mockApi = {
     return req;
   },
 };
+
+/* ------------------------------------------------------------------ */
+/* Status / Calls / Settings mock data                                 */
+/* ------------------------------------------------------------------ */
+
+import type {
+  CallRecord,
+  CallToken,
+  NotificationSettings,
+  PrivacySettings,
+  ProfileUpdatePayload,
+  StatusItem,
+  StatusRingGroup,
+  UserSettings,
+} from "@/types";
+
+const hoursFromNow = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
+
+function status(
+  user_id: string,
+  caption: string,
+  media_type: StatusItem["media_type"],
+  hoursAgo: number,
+  viewed = false,
+): StatusItem {
+  return {
+    id: `s_${uid()}`,
+    user_id,
+    media_url: null,
+    media_type,
+    caption,
+    created_at: iso(hoursAgo * 60),
+    expires_at: hoursFromNow(24 - hoursAgo),
+    viewed,
+  };
+}
+
+const statuses: StatusItem[] = [
+  status("u_me", "Shipping FluidTalk tonight ✨", "text", 2),
+  status("u_nova", "Sunrise over the studio", "image", 1),
+  status("u_nova", "Second pass on the cyan grade", "image", 3),
+  status("u_kai", "Pipeline: all green", "text", 5, true),
+  status("u_orbit", "Launch prep 🚀", "video", 8, true),
+];
+
+const calls: CallRecord[] = [
+  {
+    id: "call_1",
+    peer: people[0]!,
+    call_type: "video",
+    status: "answered",
+    direction: "incoming",
+    duration_seconds: 1284,
+    started_at: iso(90),
+  },
+  {
+    id: "call_2",
+    peer: people[1]!,
+    call_type: "voice",
+    status: "missed",
+    direction: "incoming",
+    duration_seconds: 0,
+    started_at: iso(320),
+  },
+  {
+    id: "call_3",
+    peer: people[2]!,
+    call_type: "video",
+    status: "answered",
+    direction: "outgoing",
+    duration_seconds: 3120,
+    started_at: iso(1500),
+  },
+  {
+    id: "call_4",
+    peer: people[0]!,
+    call_type: "voice",
+    status: "declined",
+    direction: "outgoing",
+    duration_seconds: 0,
+    started_at: iso(2600),
+  },
+];
+
+let settings: UserSettings = {
+  privacy_settings: {
+    last_seen: "contacts",
+    profile_photo: "everyone",
+    status: "contacts",
+    read_receipts: true,
+  },
+  notification_settings: { sound: true, vibration: true, message_preview: true },
+};
+
+let blocked: Profile[] = [];
+let profile: Profile = { ...CURRENT_USER, bio: "Designing calm interfaces at 3am." };
+
+export const mockExtras = {
+  async listStatuses(): Promise<StatusRingGroup[]> {
+    await delay(160);
+    const live = statuses.filter((s) => new Date(s.expires_at).getTime() > Date.now());
+    const ids = [...new Set(live.map((s) => s.user_id))];
+    return ids.map((id) => {
+      const items = live.filter((s) => s.user_id === id);
+      return {
+        user: id === CURRENT_USER.id ? profile : (PROFILES[id] ?? profile),
+        items,
+        all_viewed: items.every((s) => s.viewed),
+      };
+    });
+  },
+
+  async createStatus(caption: string, media_type: StatusItem["media_type"]): Promise<StatusItem> {
+    await delay();
+    const created = status(CURRENT_USER.id, caption, media_type, 0);
+    statuses.unshift(created);
+    return created;
+  },
+
+  async markStatusViewed(id: string): Promise<{ ok: true }> {
+    await delay(60);
+    const s = statuses.find((x) => x.id === id);
+    if (s) s.viewed = true;
+    return { ok: true };
+  },
+
+  async listCalls(): Promise<CallRecord[]> {
+    await delay(160);
+    return calls;
+  },
+
+  async createCall(peer_id: string, call_type: CallRecord["call_type"]): Promise<CallToken> {
+    await delay(200);
+    return {
+      room: `fluidtalk-${peer_id}-${uid()}`,
+      token: `livekit.mock.${uid()}`,
+      url: "wss://fluidtalk.livekit.cloud",
+    };
+  },
+
+  async getSettings(): Promise<UserSettings> {
+    await delay(120);
+    return settings;
+  },
+
+  async updatePrivacy(patch: Partial<PrivacySettings>): Promise<UserSettings> {
+    await delay(120);
+    settings = { ...settings, privacy_settings: { ...settings.privacy_settings, ...patch } };
+    return settings;
+  },
+
+  async updateNotifications(patch: Partial<NotificationSettings>): Promise<UserSettings> {
+    await delay(120);
+    settings = {
+      ...settings,
+      notification_settings: { ...settings.notification_settings, ...patch },
+    };
+    return settings;
+  },
+
+  async getProfile(): Promise<Profile> {
+    await delay(100);
+    return profile;
+  },
+
+  async updateProfile(patch: ProfileUpdatePayload): Promise<Profile> {
+    await delay(180);
+    profile = { ...profile, ...patch };
+    return profile;
+  },
+
+  async listBlocked(): Promise<Profile[]> {
+    await delay(120);
+    return blocked;
+  },
+
+  async block(user_id: string): Promise<Profile[]> {
+    await delay(120);
+    const p = PROFILES[user_id];
+    if (p && !blocked.some((b) => b.id === user_id)) blocked = [...blocked, p];
+    return blocked;
+  },
+
+  async unblock(user_id: string): Promise<Profile[]> {
+    await delay(120);
+    blocked = blocked.filter((b) => b.id !== user_id);
+    return blocked;
+  },
+
+  async exportData(): Promise<Blob> {
+    await delay(300);
+    const payload = { profile, conversations, messages, statuses, calls, settings };
+    return new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  },
+
+  async deleteAccount(): Promise<{ ok: true }> {
+    await delay(400);
+    return { ok: true };
+  },
+};

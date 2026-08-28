@@ -9,9 +9,24 @@ import type {
   Profile,
   SendMessagePayload,
 } from "@/types";
-import { mockApi } from "./mock-backend";
+import type {
+  CallRecord,
+  CallToken,
+  CallType,
+  NotificationSettings,
+  PrivacySettings,
+  ProfileUpdatePayload,
+  StatusItem,
+  StatusMediaType,
+  StatusRingGroup,
+  UserSettings,
+} from "@/types";
+import { mockApi, mockExtras } from "./mock-backend";
+import { NEON_DATA_API_URL, neonAuth } from "./neon-auth";
 
-const BASE_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "";
+/** Neon Data API endpoint (falls back to a custom API server if provided). */
+const BASE_URL =
+  NEON_DATA_API_URL || ((import.meta.env["VITE_API_URL"] as string | undefined) ?? "");
 
 /** When no backend URL is configured we serve deterministic mock data. */
 export const USING_MOCKS = !BASE_URL;
@@ -78,25 +93,34 @@ export const api = {
     /** POST /api/auth/email-otp  { email } -> { token, requiresOtp } */
     emailOtp(email: string): Promise<EmailOtpResponse> {
       if (USING_MOCKS) return mockApi.emailOtp(email);
-      return request("/api/auth/email-otp", { method: "POST", body: JSON.stringify({ email }) });
+      return neonAuth.sendEmailOtp(email).then(() => ({ token: "", requiresOtp: true }));
     },
 
-    /** POST /api/auth/verify-otp  { email, otp } -> { user, jwt } */
-    verifyOtp(email: string, otp: string): Promise<AuthSession> {
+    /** Neon Auth email-otp verification -> session JWT + profile */
+    async verifyOtp(email: string, otp: string): Promise<AuthSession> {
       if (USING_MOCKS) return mockApi.verifyOtp(email, otp);
-      return request("/api/auth/verify-otp", {
-        method: "POST",
-        body: JSON.stringify({ email, otp }),
-      });
+      const session = await neonAuth.verifyEmailOtp(email, otp);
+      authToken.set(session.token);
+      return { user: await api.profiles.me(), jwt: session.token };
     },
 
-    /** POST /api/auth/google  { idToken } -> { user, jwt } */
-    google(idToken: string): Promise<AuthSession> {
-      if (USING_MOCKS) return mockApi.google(idToken);
-      return request("/api/auth/google", {
-        method: "POST",
-        body: JSON.stringify({ idToken }),
-      });
+    /** Neon Auth magic link — emails a one-tap sign-in link. */
+    magicLink(email: string): Promise<{ sent: boolean }> {
+      if (USING_MOCKS) return Promise.resolve({ sent: true });
+      return neonAuth.sendMagicLink(email).then(() => ({ sent: true }));
+    },
+
+    /** Neon Auth Google OAuth — redirects to the provider consent screen. */
+    async google(_idToken?: string): Promise<AuthSession | null> {
+      if (USING_MOCKS) return mockApi.google(_idToken ?? "demo");
+      const { url } = await neonAuth.googleAuthorizeUrl();
+      if (typeof window !== "undefined") window.location.assign(url);
+      return null;
+    },
+
+    async signOut(): Promise<void> {
+      if (!USING_MOCKS) await neonAuth.signOut().catch(() => undefined);
+      authToken.clear();
     },
   },
 
@@ -150,8 +174,95 @@ export const api = {
 
   profiles: {
     me(): Promise<Profile> {
-      if (USING_MOCKS) return mockApi.me();
+      if (USING_MOCKS) return mockExtras.getProfile();
       return request("/api/profiles/me");
+    },
+    update(patch: ProfileUpdatePayload): Promise<Profile> {
+      if (USING_MOCKS) return mockExtras.updateProfile(patch);
+      return request("/api/profiles/me", { method: "PATCH", body: JSON.stringify(patch) });
+    },
+  },
+
+  statuses: {
+    /** GET /api/statuses -> grouped rings, unexpired only */
+    list(): Promise<StatusRingGroup[]> {
+      if (USING_MOCKS) return mockExtras.listStatuses();
+      return request("/api/statuses");
+    },
+    create(caption: string, media_type: StatusMediaType): Promise<StatusItem> {
+      if (USING_MOCKS) return mockExtras.createStatus(caption, media_type);
+      return request("/api/statuses", {
+        method: "POST",
+        body: JSON.stringify({ caption, media_type }),
+      });
+    },
+    markViewed(id: string): Promise<{ ok: true }> {
+      if (USING_MOCKS) return mockExtras.markStatusViewed(id);
+      return request(`/api/statuses/${id}/view`, { method: "POST" });
+    },
+  },
+
+  calls: {
+    history(): Promise<CallRecord[]> {
+      if (USING_MOCKS) return mockExtras.listCalls();
+      return request("/api/calls");
+    },
+    /** POST /api/calls -> LiveKit/Daily room credentials for WebRTC signaling */
+    start(peer_id: string, call_type: CallType): Promise<CallToken> {
+      if (USING_MOCKS) return mockExtras.createCall(peer_id, call_type);
+      return request("/api/calls", {
+        method: "POST",
+        body: JSON.stringify({ peer_id, call_type }),
+      });
+    },
+  },
+
+  settings: {
+    get(): Promise<UserSettings> {
+      if (USING_MOCKS) return mockExtras.getSettings();
+      return request("/api/settings");
+    },
+    updatePrivacy(patch: Partial<PrivacySettings>): Promise<UserSettings> {
+      if (USING_MOCKS) return mockExtras.updatePrivacy(patch);
+      return request("/api/settings/privacy", { method: "PATCH", body: JSON.stringify(patch) });
+    },
+    updateNotifications(patch: Partial<NotificationSettings>): Promise<UserSettings> {
+      if (USING_MOCKS) return mockExtras.updateNotifications(patch);
+      return request("/api/settings/notifications", {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+    },
+  },
+
+  blocked: {
+    list(): Promise<Profile[]> {
+      if (USING_MOCKS) return mockExtras.listBlocked();
+      return request("/api/blocked");
+    },
+    block(user_id: string): Promise<Profile[]> {
+      if (USING_MOCKS) return mockExtras.block(user_id);
+      return request("/api/blocked", { method: "POST", body: JSON.stringify({ user_id }) });
+    },
+    unblock(user_id: string): Promise<Profile[]> {
+      if (USING_MOCKS) return mockExtras.unblock(user_id);
+      return request(`/api/blocked/${user_id}`, { method: "DELETE" });
+    },
+  },
+
+  account: {
+    async exportData(): Promise<Blob> {
+      if (USING_MOCKS) return mockExtras.exportData();
+      const res = await fetch(`${BASE_URL}/api/account/export`, {
+        headers: { Authorization: `Bearer ${authToken.get() ?? ""}` },
+      });
+      if (!res.ok) throw new ApiError(res.status, "Export failed");
+      return res.blob();
+    },
+    remove(): Promise<{ ok: true }> {
+      if (USING_MOCKS) return mockExtras.deleteAccount();
+      return request("/api/account", { method: "DELETE" });
     },
   },
 };
+
