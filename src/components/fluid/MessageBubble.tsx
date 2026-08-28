@@ -29,8 +29,8 @@ export interface MessageBubbleProps {
   message: Message;
   mine: boolean;
   index: number;
-  senderName?: string;
-  replyTo?: Message | null;
+  senderName?: string | undefined;
+  replyTo?: Message | null | undefined;
   onReact: (messageId: string, emoji: string) => void;
   onReply: (message: Message) => void;
 }
