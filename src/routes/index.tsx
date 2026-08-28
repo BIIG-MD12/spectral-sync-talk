@@ -70,9 +70,10 @@ function AuthScreen() {
   const google = async () => {
     setLoading(true);
     try {
-      const { user, jwt } = await api.auth.google("demo-id-token");
-      authToken.set(jwt);
-      setSession(user, jwt);
+      const session = await api.auth.google("demo-id-token");
+      if (!session) return; // redirected to Google consent screen
+      authToken.set(session.jwt);
+      setSession(session.user, session.jwt);
       navigate({ to: "/chats" });
     } catch {
       toast.error("Google sign-in failed");
