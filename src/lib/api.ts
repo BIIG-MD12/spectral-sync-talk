@@ -96,22 +96,31 @@ export const api = {
       return neonAuth.sendEmailOtp(email).then(() => ({ token: "", requiresOtp: true }));
     },
 
-    /** POST /api/auth/verify-otp  { email, otp } -> { user, jwt } */
-    verifyOtp(email: string, otp: string): Promise<AuthSession> {
+    /** Neon Auth email-otp verification -> session JWT + profile */
+    async verifyOtp(email: string, otp: string): Promise<AuthSession> {
       if (USING_MOCKS) return mockApi.verifyOtp(email, otp);
-      return request("/api/auth/verify-otp", {
-        method: "POST",
-        body: JSON.stringify({ email, otp }),
-      });
+      const session = await neonAuth.verifyEmailOtp(email, otp);
+      authToken.set(session.token);
+      return { user: await api.profiles.me(), jwt: session.token };
     },
 
-    /** POST /api/auth/google  { idToken } -> { user, jwt } */
-    google(idToken: string): Promise<AuthSession> {
-      if (USING_MOCKS) return mockApi.google(idToken);
-      return request("/api/auth/google", {
-        method: "POST",
-        body: JSON.stringify({ idToken }),
-      });
+    /** Neon Auth magic link — emails a one-tap sign-in link. */
+    magicLink(email: string): Promise<{ sent: boolean }> {
+      if (USING_MOCKS) return Promise.resolve({ sent: true });
+      return neonAuth.sendMagicLink(email).then(() => ({ sent: true }));
+    },
+
+    /** Neon Auth Google OAuth — redirects to the provider consent screen. */
+    async google(_idToken?: string): Promise<AuthSession | null> {
+      if (USING_MOCKS) return mockApi.google(_idToken ?? "demo");
+      const { url } = await neonAuth.googleAuthorizeUrl();
+      if (typeof window !== "undefined") window.location.assign(url);
+      return null;
+    },
+
+    async signOut(): Promise<void> {
+      if (!USING_MOCKS) await neonAuth.signOut().catch(() => undefined);
+      authToken.clear();
     },
   },
 
