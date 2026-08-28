@@ -8,6 +8,7 @@ export interface Profile {
   username: string;
   display_name: string;
   avatar_url: string | null;
+  bio?: string | null;
   status: PresenceStatus;
   created_at: string;
 }
