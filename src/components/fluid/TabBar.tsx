@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { CircleDashed, MessageCircle, Phone, User } from "lucide-react";
+import { MessageCircle, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SPRING = { type: "spring", stiffness: 300, damping: 25 } as const;
