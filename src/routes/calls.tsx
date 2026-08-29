@@ -14,8 +14,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { TabBar } from "@/components/fluid/TabBar";
 import { api } from "@/lib/api";
-import { PROFILES } from "@/lib/mock-backend";
-import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
 import type { CallRecord, CallType } from "@/types";
 
@@ -57,14 +55,15 @@ function when(iso: string) {
 
 function CallsScreen() {
   const { data, isLoading } = useQuery({ queryKey: ["calls"], queryFn: () => api.calls.history() });
-  const startCall = useAppStore((s) => s.startCall);
+  const peers = Array.from(
+    new Map((data ?? []).map((c) => [c.peer.id, c.peer])).values(),
+  );
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const dial = async (peerId: string, peerName: string, type: CallType) => {
     setSheetOpen(false);
     try {
-      const token = await api.calls.start(peerId, type);
-      startCall({ peerName, type, room: token.room });
+      await api.calls.start(peerId, type);
       toast.success(`${type === "video" ? "Video" : "Voice"} call with ${peerName}`);
     } catch {
       toast.error("Could not start the call");
@@ -124,9 +123,12 @@ function CallsScreen() {
               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border" />
               <h2 className="mb-3 text-[15px] font-medium">Start a call</h2>
               <ul className="space-y-2">
-                {Object.values(PROFILES)
-                  .filter((p) => p.id !== "u_me")
-                  .map((p) => (
+                {peers.length === 0 && (
+                  <li className="rounded-2xl bg-glass px-4 py-6 text-center text-[13px] text-muted-foreground">
+                    No contacts yet
+                  </li>
+                )}
+                {peers.map((p) => (
                     <li
                       key={p.id}
                       className="flex items-center gap-3 rounded-2xl bg-glass px-4 py-3"

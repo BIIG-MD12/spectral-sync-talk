@@ -1,15 +1,13 @@
 import { Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { CircleDashed, MessageCircle, Phone, User } from "lucide-react";
+import { MessageCircle, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SPRING = { type: "spring", stiffness: 300, damping: 25 } as const;
 
 const TABS = [
   { to: "/chats", label: "Chats", icon: MessageCircle },
-  { to: "/status", label: "Status", icon: CircleDashed },
   { to: "/calls", label: "Calls", icon: Phone },
-  { to: "/profile", label: "Profile", icon: User },
 ] as const;
 
 export function TabBar() {
