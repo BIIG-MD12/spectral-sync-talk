@@ -141,7 +141,11 @@ export const api = {
   auth: {
     /** Restore an existing Neon Auth session on app start. */
     async session(): Promise<AuthSession | null> {
-      if (USING_MOCKS) return mockApi.session?.() ?? null;
+      if (USING_MOCKS) {
+        const jwt = authToken.get();
+        if (!jwt) return null;
+        return { user: await mockExtras.getProfile(), jwt };
+      }
       const session = await neonAuth.getSession();
       if (!session) return null;
       const user = await api.profiles.ensure(session.user);
