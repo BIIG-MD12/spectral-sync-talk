@@ -3,42 +3,90 @@
  *
  * Talks to the Better-Auth REST surface hosted by Neon Auth using native fetch.
  * No Supabase, no SDK lock-in — the JWT it returns is verified against the
- * published JWKS and attached as `Authorization: Bearer <token>` by src/lib/api.ts.
+ * published JWKS by the Neon Data API and attached as
+ * `Authorization: Bearer <token>` by src/lib/api.ts.
  */
 
-export const NEON_AUTH_URL =
-  (import.meta.env["VITE_NEON_AUTH_URL"] as string | undefined) ??
-  "https://ep-nameless-king-axpsohl1.neonauth.c-4.us-east-2.aws.neon.tech/neondb/auth";
+import { NEON_AUTH_URL, NeonNotConfiguredError } from "./neon-config";
 
-export const NEON_JWKS_URL = `${NEON_AUTH_URL}/.well-known/jwks.json`;
+export { NEON_AUTH_URL };
+export const NEON_JWKS_URL = NEON_AUTH_URL ? `${NEON_AUTH_URL}/.well-known/jwks.json` : "";
 
-/** Neon Data API (PostgREST) base — all data reads/writes go through this. */
-export const NEON_DATA_API_URL =
-  (import.meta.env["VITE_NEON_DATA_API_URL"] as string | undefined) ?? "";
+const TOKEN_KEY = "fluidtalk.jwt";
+
+/** Session JWT persistence (browser only). */
+export const authToken = {
+  get(): string | null {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(TOKEN_KEY);
+  },
+  set(jwt: string) {
+    if (typeof window !== "undefined") window.localStorage.setItem(TOKEN_KEY, jwt);
+  },
+  clear() {
+    if (typeof window !== "undefined") window.localStorage.removeItem(TOKEN_KEY);
+  },
+};
+
+export interface NeonAuthUser {
+  id: string;
+  email: string;
+  name?: string | null;
+  image?: string | null;
+}
 
 export interface BetterAuthSession {
   token: string;
-  user: {
-    id: string;
-    email: string;
-    name?: string | null;
-    image?: string | null;
-  };
+  user: NeonAuthUser;
 }
 
-async function authFetch<T>(path: string, body: unknown): Promise<T> {
+export class NeonAuthError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "NeonAuthError";
+  }
+}
+
+async function authFetch<T>(path: string, body?: unknown, method: "GET" | "POST" = "POST") {
+  if (!NEON_AUTH_URL) throw new NeonNotConfiguredError("Neon Auth");
+  const token = authToken.get();
   const res = await fetch(`${NEON_AUTH_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     credentials: "include",
-    body: JSON.stringify(body),
+    ...(method === "POST" ? { body: JSON.stringify(body ?? {}) } : {}),
   });
-  if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
-  return (await res.json()) as T;
+  if (!res.ok) {
+    throw new NeonAuthError(res.status, await res.text().catch(() => res.statusText));
+  }
+  const text = await res.text();
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 export const neonAuth = {
   jwksUrl: NEON_JWKS_URL,
+
+  /** Restore an existing session (cookie or stored bearer token). */
+  async getSession(): Promise<BetterAuthSession | null> {
+    if (!NEON_AUTH_URL) return null;
+    const data = await authFetch<{
+      user?: NeonAuthUser;
+      session?: { token?: string };
+      token?: string;
+    } | null>("/get-session", undefined, "GET").catch(() => null);
+
+    if (!data?.user) return null;
+    const token = data.token ?? data.session?.token ?? authToken.get();
+    if (!token) return null;
+    authToken.set(token);
+    return { token, user: data.user };
+  },
 
   /** Better-Auth email-otp plugin: send a 6-digit sign-in code. */
   sendEmailOtp(email: string) {
@@ -49,8 +97,13 @@ export const neonAuth = {
   },
 
   /** Better-Auth email-otp plugin: exchange the code for a session JWT. */
-  verifyEmailOtp(email: string, otp: string) {
-    return authFetch<BetterAuthSession>("/sign-in/email-otp", { email, otp });
+  async verifyEmailOtp(email: string, otp: string): Promise<BetterAuthSession> {
+    const res = await authFetch<{ token: string; user: NeonAuthUser }>("/sign-in/email-otp", {
+      email,
+      otp,
+    });
+    authToken.set(res.token);
+    return res;
   },
 
   /** Better-Auth magic-link plugin: emails a one-tap sign-in link. */
@@ -66,7 +119,11 @@ export const neonAuth = {
     });
   },
 
-  signOut() {
-    return authFetch<{ success: boolean }>("/sign-out", {});
+  async signOut() {
+    try {
+      if (NEON_AUTH_URL) await authFetch<{ success: boolean }>("/sign-out", {});
+    } finally {
+      authToken.clear();
+    }
   },
 };
