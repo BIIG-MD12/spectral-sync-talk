@@ -106,12 +106,12 @@ export const neonAuth = {
   },
 
   /** Better-Auth magic-link plugin: emails a one-tap sign-in link. */
-  sendMagicLink(email: string, callbackURL = "/chats") {
+  sendMagicLink(email: string, callbackURL = `${APP_URL}/chats`) {
     return authFetch<{ status: boolean }>("/sign-in/magic-link", { email, callbackURL });
   },
 
   /** Better-Auth social provider: returns the Google consent URL to redirect to. */
-  googleAuthorizeUrl(callbackURL = "/chats") {
+  googleAuthorizeUrl(callbackURL = `${APP_URL}/chats`) {
     return authFetch<{ url: string; redirect: boolean }>("/sign-in/social", {
       provider: "google",
       callbackURL,
