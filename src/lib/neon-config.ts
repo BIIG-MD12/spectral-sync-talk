@@ -19,7 +19,15 @@ function clean(value: string | undefined): string {
 
 export const NEON_AUTH_URL = clean(env["VITE_NEON_AUTH_URL"]);
 export const NEON_DATA_API_URL = clean(env["VITE_NEON_DATA_API_URL"]);
+export const NEON_JWKS_URL =
+  clean(env["VITE_NEON_JWKS_URL"]) ||
+  (NEON_AUTH_URL ? `${NEON_AUTH_URL}/.well-known/jwks.json` : "");
 export const REALTIME_URL = clean(env["VITE_REALTIME_URL"] ?? env["VITE_API_URL"]);
+
+/** Public base URL of this app: OAuth callbacks and invite links. */
+export const APP_URL =
+  clean(env["VITE_APP_URL"]) ||
+  (typeof window !== "undefined" ? window.location.origin : "");
 
 /**
  * Mocks are OPT-IN for local development only. They are never used as a
