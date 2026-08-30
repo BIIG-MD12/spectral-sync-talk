@@ -7,10 +7,9 @@
  * `Authorization: Bearer <token>` by src/lib/api.ts.
  */
 
-import { NEON_AUTH_URL, NeonNotConfiguredError } from "./neon-config";
+import { NEON_AUTH_URL, NEON_JWKS_URL, NeonNotConfiguredError } from "./neon-config";
 
-export { NEON_AUTH_URL };
-export const NEON_JWKS_URL = NEON_AUTH_URL ? `${NEON_AUTH_URL}/.well-known/jwks.json` : "";
+export { NEON_AUTH_URL, NEON_JWKS_URL };
 
 const TOKEN_KEY = "fluidtalk.jwt";
 
