@@ -7,7 +7,7 @@
  * `Authorization: Bearer <token>` by src/lib/api.ts.
  */
 
-import { NEON_AUTH_URL, NEON_JWKS_URL, NeonNotConfiguredError } from "./neon-config";
+import { APP_URL, NEON_AUTH_URL, NEON_JWKS_URL, NeonNotConfiguredError } from "./neon-config";
 
 export { NEON_AUTH_URL, NEON_JWKS_URL };
 
