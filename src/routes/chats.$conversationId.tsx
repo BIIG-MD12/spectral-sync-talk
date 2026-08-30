@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, Loader2, Video } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Composer } from "@/components/fluid/Composer";
+import { ConnectionError } from "@/components/fluid/ConnectionError";
 import { MessageBubble } from "@/components/fluid/MessageBubble";
 import { useRealtime } from "@/hooks/useRealtime";
 import { api } from "@/lib/api";
@@ -48,7 +49,7 @@ function ChatRoom() {
     return () => setActiveConversation(null);
   }, [conversationId, setActiveConversation]);
 
-  useRealtime(conversationId, {
+  const realtime = useRealtime(conversationId, {
     onMessage: () => queryClient.invalidateQueries({ queryKey: ["messages", conversationId] }),
   });
 
@@ -120,6 +121,22 @@ function ChatRoom() {
           <Video className="size-[18px]" />
         </button>
       </motion.header>
+
+      <AnimatePresence>
+        {realtime.isError && (
+          <div className="relative z-20 pt-3">
+            <ConnectionError
+              title="Live connection lost"
+              body="Messages won't arrive in real time until we reconnect."
+              detail={realtime.error ?? undefined}
+              onRetry={() => {
+                realtime.reconnect();
+                queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+              }}
+            />
+          </div>
+        )}
+      </AnimatePresence>
 
       <div className="relative z-10 flex-1 space-y-3 overflow-y-auto py-5">
         {isLoading && (

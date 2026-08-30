@@ -1,7 +1,13 @@
 import { create } from "zustand";
 import type { Profile } from "@/types";
 
-export type SocketStatus = "idle" | "connecting" | "connected" | "reconnecting" | "disconnected";
+export type SocketStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "disconnected"
+  | "error";
 
 interface AppState {
   user: Profile | null;
@@ -9,6 +15,7 @@ interface AppState {
   activeConversationId: string | null;
   unreadCounts: Record<string, number>;
   socketStatus: SocketStatus;
+  socketError: string | null;
   typingIn: Record<string, string[]>;
 
   setSession: (user: Profile, jwt: string) => void;
@@ -16,7 +23,7 @@ interface AppState {
   setActiveConversation: (id: string | null) => void;
   setUnread: (conversationId: string, count: number) => void;
   incrementUnread: (conversationId: string) => void;
-  setSocketStatus: (status: SocketStatus) => void;
+  setSocketStatus: (status: SocketStatus, error?: string | null) => void;
   setTyping: (conversationId: string, userIds: string[]) => void;
 }
 
@@ -26,6 +33,7 @@ export const useAppStore = create<AppState>((set) => ({
   activeConversationId: null,
   unreadCounts: {},
   socketStatus: "idle",
+  socketError: null,
   typingIn: {},
 
   setSession: (user, jwt) => set({ user, jwt }),
@@ -44,7 +52,7 @@ export const useAppStore = create<AppState>((set) => ({
         [conversationId]: (s.unreadCounts[conversationId] ?? 0) + 1,
       },
     })),
-  setSocketStatus: (socketStatus) => set({ socketStatus }),
+  setSocketStatus: (socketStatus, error = null) => set({ socketStatus, socketError: error }),
   setTyping: (conversationId, userIds) =>
     set((s) => ({ typingIn: { ...s.typingIn, [conversationId]: userIds } })),
 }));
