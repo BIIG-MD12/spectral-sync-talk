@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Archive, Loader2, Search } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { ConnectionError } from "@/components/fluid/ConnectionError";
 import { useAppStore } from "@/store/useAppStore";
 import { useRealtime } from "@/hooks/useRealtime";
 import type { Conversation } from "@/types";
@@ -42,13 +43,13 @@ function relative(iso?: string | null) {
 }
 
 function ChatList() {
-  useRealtime(null);
+  const realtime = useRealtime(null);
   const [archived, setArchived] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const unreadCounts = useAppStore((s) => s.unreadCounts);
   const socketStatus = useAppStore((s) => s.socketStatus);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ["conversations"],
     queryFn: () => api.conversations.list(),
   });
@@ -64,7 +65,14 @@ function ChatList() {
       <header className="relative z-10 px-5 pb-3 pt-8">
         <h1 className="text-3xl font-semibold tracking-tight text-glow">Messages</h1>
         <p className="mt-1 text-[12px] text-muted-foreground">
-          {socketStatus === "connected" ? "Live" : "Offline demo mode"} · swipe a card to archive
+          {socketStatus === "connected"
+            ? "Live"
+            : socketStatus === "reconnecting" || socketStatus === "connecting"
+              ? "Connecting…"
+              : socketStatus === "error"
+                ? "Live updates paused"
+                : "Ready"}{" "}
+          · swipe a card to archive
         </p>
         <div className="mt-4 flex items-center gap-2 rounded-2xl bg-glass px-4 py-2.5">
           <Search className="size-4 text-muted-foreground" />
@@ -76,6 +84,20 @@ function ChatList() {
           />
         </div>
       </header>
+
+      {realtime.isError && (
+        <div className="relative z-10 pb-2">
+          <ConnectionError
+            title="Live connection lost"
+            body="New messages won't appear automatically until we reconnect."
+            detail={realtime.error ?? undefined}
+            onRetry={() => {
+              realtime.reconnect();
+              void refetch();
+            }}
+          />
+        </div>
+      )}
 
       {isLoading && (
         <div className="flex justify-center py-16">
