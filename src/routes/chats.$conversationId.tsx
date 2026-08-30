@@ -121,6 +121,22 @@ function ChatRoom() {
         </button>
       </motion.header>
 
+      <AnimatePresence>
+        {realtime.isError && (
+          <div className="relative z-20 pt-3">
+            <ConnectionError
+              title="Live connection lost"
+              body="Messages won't arrive in real time until we reconnect."
+              detail={realtime.error ?? undefined}
+              onRetry={() => {
+                realtime.reconnect();
+                queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+              }}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+
       <div className="relative z-10 flex-1 space-y-3 overflow-y-auto py-5">
         {isLoading && (
           <div className="flex justify-center py-16">
