@@ -48,7 +48,7 @@ function ChatRoom() {
     return () => setActiveConversation(null);
   }, [conversationId, setActiveConversation]);
 
-  useRealtime(conversationId, {
+  const realtime = useRealtime(conversationId, {
     onMessage: () => queryClient.invalidateQueries({ queryKey: ["messages", conversationId] }),
   });
 
