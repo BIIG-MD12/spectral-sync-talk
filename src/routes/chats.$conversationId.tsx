@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, Loader2, Video } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Composer } from "@/components/fluid/Composer";
+import { ConnectionError } from "@/components/fluid/ConnectionError";
 import { MessageBubble } from "@/components/fluid/MessageBubble";
 import { useRealtime } from "@/hooks/useRealtime";
 import { api } from "@/lib/api";
