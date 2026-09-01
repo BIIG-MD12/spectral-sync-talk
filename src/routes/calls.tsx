@@ -157,8 +157,6 @@ function CallsScreen() {
           </>
         )}
       </AnimatePresence>
-
-      <TabBar />
     </main>
   );
 }
