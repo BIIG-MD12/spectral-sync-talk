@@ -119,11 +119,15 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const user = useAppStore((s) => s.user);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const showTabBar = Boolean(user) && pathname !== "/";
 
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      {showTabBar && <TabBar />}
     </QueryClientProvider>
   );
 }
