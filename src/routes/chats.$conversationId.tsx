@@ -3,14 +3,18 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, Loader2, Video } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Composer } from "@/components/fluid/Composer";
 import { ConnectionError } from "@/components/fluid/ConnectionError";
 import { MessageBubble } from "@/components/fluid/MessageBubble";
 import { useRealtime } from "@/hooks/useRealtime";
+import { useRequireAuth } from "@/hooks/useSession";
 import { api } from "@/lib/api";
-import { CURRENT_USER } from "@/lib/mock-backend";
 import { useAppStore } from "@/store/useAppStore";
 import type { EffectType, Message } from "@/types";
+
+/** When no socket server is connected, poll the Data API so other people's messages still arrive. */
+const POLL_INTERVAL_MS = 4000;
 
 const SPRING = { type: "spring", stiffness: 300, damping: 25 } as const;
 
