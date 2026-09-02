@@ -232,6 +232,23 @@ export const api = {
       if (!profile) throw new ApiError(500, "Profile update failed");
       return profile;
     },
+
+    /** Find people by username / display name (excludes yourself). */
+    async search(q: string): Promise<Profile[]> {
+      const term = q.trim().replace(/[%,()]/g, "");
+      if (!term) return [];
+      const session = await neonAuth.getSession();
+      if (!session) return [];
+      const rows = await dataApi<Profile[]>("/profiles", {
+        query: {
+          select: "*",
+          or: `(username.ilike.*${term}*,display_name.ilike.*${term}*,email.ilike.*${term}*)`,
+          id: `neq.${session.user.id}`,
+          limit: 20,
+        },
+      });
+      return rows ?? [];
+    },
   },
 
   conversations: {
