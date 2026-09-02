@@ -133,13 +133,21 @@ function ChatRoom() {
         <Link to="/chats" className="grid size-9 place-items-center rounded-full bg-glass">
           <ChevronLeft className="size-5" />
         </Link>
-        <div className="grid size-9 place-items-center rounded-full bg-primary/20 text-[13px] font-semibold text-primary">
-          {(conversation?.title ?? "?").slice(0, 1)}
+        <div className="grid size-9 place-items-center overflow-hidden rounded-full bg-primary/20 text-[13px] font-semibold text-primary">
+          {peer?.avatar_url && !conversation?.is_group ? (
+            <img src={peer.avatar_url} alt="" className="size-9 object-cover" />
+          ) : (
+            (title ?? "?").slice(0, 1)
+          )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-medium">{conversation?.title ?? "Loading…"}</p>
+          <p className="truncate text-[15px] font-medium">{title ?? "Loading…"}</p>
           <p className="text-[12px] text-muted-foreground">
-            {conversation?.is_group ? `${conversation.participants?.length ?? 0} people` : "Active now"}
+            {conversation?.is_group
+              ? `${conversation.participants?.length ?? 0} people`
+              : socketStatus === "connected"
+                ? "Live"
+                : "Syncing every few seconds"}
           </p>
         </div>
         <button className="grid size-9 place-items-center rounded-full bg-glass text-muted-foreground">
@@ -148,15 +156,16 @@ function ChatRoom() {
       </motion.header>
 
       <AnimatePresence>
-        {realtime.isError && (
+        {(realtime.isError || isError) && (
           <div className="relative z-20 pt-3">
             <ConnectionError
-              title="Live connection lost"
-              body="Messages won't arrive in real time until we reconnect."
+              title={isError ? undefined : "Live connection lost"}
+              body={isError ? undefined : "Messages won't arrive in real time until we reconnect."}
               detail={realtime.error ?? undefined}
               onRetry={() => {
                 realtime.reconnect();
-                queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+                void refetch();
+                queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
               }}
             />
           </div>
@@ -169,22 +178,32 @@ function ChatRoom() {
             <Loader2 className="size-5 animate-spin text-primary" />
           </div>
         )}
+        {!isLoading && !isError && messages.length === 0 && (
+          <p className="px-8 pt-16 text-center text-[13px] text-muted-foreground">
+            No messages yet. Say hello — it'll be saved to your Neon database.
+          </p>
+        )}
         <AnimatePresence initial={false}>
           {messages.map((m, i) => {
             const reaction = localReactions[m.id];
+            const merged = reaction
+              ? {
+                  ...m,
+                  reactions: [
+                    ...(m.reactions ?? []).filter((r) => r.user_id !== myId),
+                    { emoji: reaction, user_id: myId },
+                  ],
+                }
+              : m;
             return (
               <MessageBubble
                 key={m.id}
                 index={i}
-                message={
-                  reaction
-                    ? { ...m, reactions: [...(m.reactions ?? []), { emoji: reaction, user_id: myId }] }
-                    : m
-                }
+                message={merged}
                 mine={m.sender_id === myId}
                 senderName={conversation?.is_group ? nameFor(m.sender_id) : undefined}
                 replyTo={m.reply_to_id ? (byId.get(m.reply_to_id) ?? null) : null}
-                onReact={(id, emoji) => setLocalReactions((r) => ({ ...r, [id]: emoji }))}
+                onReact={(id, emoji) => react.mutate({ id, emoji })}
                 onReply={setReplyTo}
               />
             );
