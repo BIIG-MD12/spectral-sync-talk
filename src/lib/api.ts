@@ -323,6 +323,55 @@ export const api = {
       if (!message) throw new ApiError(500, "Message was not saved");
       return message;
     },
+
+    /** Start a conversation with one or more people (reuses an existing 1:1). */
+    async create(peerIds: string[], title?: string): Promise<Conversation> {
+      const session = await neonAuth.getSession();
+      if (!session) throw new ApiError(401, "Not signed in");
+      const me = session.user.id;
+      const isGroup = peerIds.length > 1;
+
+      if (!isGroup && peerIds[0]) {
+        const existing = (await api.conversations.list()).find(
+          (c) =>
+            !c.is_group &&
+            (c.participants ?? []).length === 2 &&
+            (c.participants ?? []).some((p) => p.id === peerIds[0]),
+        );
+        if (existing) return existing;
+      }
+
+      const created = await dataApi<ConversationRow[]>("/conversations", {
+        method: "POST",
+        headers: RETURN_ROW,
+        body: JSON.stringify({ title: title ?? null, is_group: isGroup, created_by: me }),
+      });
+      const row = created?.[0];
+      if (!row) throw new ApiError(500, "Conversation was not created");
+
+      await dataApi("/conversation_participants", {
+        method: "POST",
+        headers: { Prefer: "resolution=ignore-duplicates" },
+        body: JSON.stringify(
+          [me, ...peerIds].map((user_id) => ({ conversation_id: row.id, user_id })),
+        ),
+      });
+
+      return api.conversations.get(row.id);
+    },
+
+    /** One reaction per user per message (upsert on the composite key). */
+    async react(messageId: string, emoji: string): Promise<void> {
+      if (USING_MOCKS) return;
+      const session = await neonAuth.getSession();
+      if (!session) throw new ApiError(401, "Not signed in");
+      await dataApi("/message_reactions", {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates" },
+        query: { on_conflict: "message_id,user_id" },
+        body: JSON.stringify({ message_id: messageId, user_id: session.user.id, emoji }),
+      });
+    },
   },
 
   contactRequests: {
