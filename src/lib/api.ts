@@ -361,21 +361,76 @@ export const api = {
     },
   },
 
-  /* --- Feature surfaces not yet backed by Neon tables (Operation 1 scope). */
-  /* They return empty/neutral data rather than fake records.                */
-
   statuses: {
-    list(): Promise<StatusRingGroup[]> {
+    /** Active (non-expired) statuses grouped per author, own ring first. */
+    async list(): Promise<StatusRingGroup[]> {
       if (USING_MOCKS) return mockExtras.listStatuses();
-      return Promise.resolve([]);
+      const session = await neonAuth.getSession();
+      if (!session) return [];
+      const me = session.user.id;
+
+      const rows = await dataApi<StatusRow[]>("/statuses", {
+        query: {
+          select: "id,user_id,media_url,media_type,caption,created_at,expires_at,profile:profiles(*),views:status_views(viewer_id)",
+          expires_at: `gt.${new Date().toISOString()}`,
+          order: "created_at.asc",
+        },
+      });
+
+      const groups = new Map<string, StatusRingGroup>();
+      for (const row of rows ?? []) {
+        if (!row.profile) continue;
+        const item: StatusItem = {
+          id: row.id,
+          user_id: row.user_id,
+          media_url: row.media_url,
+          media_type: row.media_type,
+          caption: row.caption,
+          created_at: row.created_at,
+          expires_at: row.expires_at,
+          viewed: row.user_id === me || (row.views ?? []).some((v) => v.viewer_id === me),
+        };
+        const g = groups.get(row.user_id) ?? { user: row.profile, items: [], all_viewed: true };
+        g.items.push(item);
+        g.all_viewed = g.all_viewed && item.viewed;
+        groups.set(row.user_id, g);
+      }
+
+      return [...groups.values()].sort((a, b) => {
+        if (a.user.id === me) return -1;
+        if (b.user.id === me) return 1;
+        if (a.all_viewed !== b.all_viewed) return a.all_viewed ? 1 : -1;
+        return (
+          new Date(b.items.at(-1)?.created_at ?? 0).getTime() -
+          new Date(a.items.at(-1)?.created_at ?? 0).getTime()
+        );
+      });
     },
-    create(caption: string, media_type: StatusMediaType): Promise<StatusItem> {
+
+    async create(caption: string, media_type: StatusMediaType, media_url: string | null = null): Promise<StatusItem> {
       if (USING_MOCKS) return mockExtras.createStatus(caption, media_type);
-      return Promise.reject(new ApiError(501, "Status is not available yet"));
+      const session = await neonAuth.getSession();
+      if (!session) throw new ApiError(401, "Not signed in");
+      const rows = await dataApi<Omit<StatusItem, "viewed">[]>("/statuses", {
+        method: "POST",
+        headers: RETURN_ROW,
+        body: JSON.stringify({ user_id: session.user.id, caption, media_type, media_url }),
+      });
+      const row = rows?.[0];
+      if (!row) throw new ApiError(500, "Status was not saved");
+      return { ...row, viewed: true };
     },
-    markViewed(id: string): Promise<{ ok: true }> {
+
+    async markViewed(id: string): Promise<{ ok: true }> {
       if (USING_MOCKS) return mockExtras.markStatusViewed(id);
-      return Promise.resolve({ ok: true });
+      const session = await neonAuth.getSession();
+      if (!session) return { ok: true };
+      await dataApi("/status_views", {
+        method: "POST",
+        headers: { Prefer: "resolution=ignore-duplicates" },
+        body: JSON.stringify({ status_id: id, viewer_id: session.user.id }),
+      }).catch(() => undefined);
+      return { ok: true };
     },
   },
 
@@ -391,36 +446,134 @@ export const api = {
   },
 
   settings: {
-    get(): Promise<UserSettings> {
-      return mockExtras.getSettings();
+    async get(): Promise<UserSettings> {
+      if (USING_MOCKS) return mockExtras.getSettings();
+      const session = await neonAuth.getSession();
+      if (!session) throw new ApiError(401, "Not signed in");
+      const row = await selectOne<UserSettings>("/user_settings", {
+        select: "privacy_settings,notification_settings",
+        user_id: `eq.${session.user.id}`,
+      });
+      return row ?? DEFAULT_SETTINGS;
     },
-    updatePrivacy(patch: Partial<PrivacySettings>): Promise<UserSettings> {
-      return mockExtras.updatePrivacy(patch);
+    async updatePrivacy(patch: Partial<PrivacySettings>): Promise<UserSettings> {
+      if (USING_MOCKS) return mockExtras.updatePrivacy(patch);
+      const current = await api.settings.get();
+      return upsertSettings({ ...current, privacy_settings: { ...current.privacy_settings, ...patch } });
     },
-    updateNotifications(patch: Partial<NotificationSettings>): Promise<UserSettings> {
-      return mockExtras.updateNotifications(patch);
+    async updateNotifications(patch: Partial<NotificationSettings>): Promise<UserSettings> {
+      if (USING_MOCKS) return mockExtras.updateNotifications(patch);
+      const current = await api.settings.get();
+      return upsertSettings({
+        ...current,
+        notification_settings: { ...current.notification_settings, ...patch },
+      });
     },
   },
 
   blocked: {
-    list(): Promise<Profile[]> {
+    async list(): Promise<Profile[]> {
       if (USING_MOCKS) return mockExtras.listBlocked();
-      return Promise.resolve([]);
+      const session = await neonAuth.getSession();
+      if (!session) return [];
+      const rows = await dataApi<{ profile: Profile | null }[]>("/blocked_users", {
+        query: {
+          select: "profile:profiles!blocked_users_blocked_id_fkey(*)",
+          blocker_id: `eq.${session.user.id}`,
+          order: "created_at.desc",
+        },
+      });
+      return (rows ?? []).map((r) => r.profile).filter((p): p is Profile => Boolean(p));
     },
-    block(user_id: string): Promise<Profile[]> {
-      return mockExtras.block(user_id);
+    async block(user_id: string): Promise<Profile[]> {
+      if (USING_MOCKS) return mockExtras.block(user_id);
+      const session = await neonAuth.getSession();
+      if (!session) throw new ApiError(401, "Not signed in");
+      await dataApi("/blocked_users", {
+        method: "POST",
+        headers: { Prefer: "resolution=ignore-duplicates" },
+        body: JSON.stringify({ blocker_id: session.user.id, blocked_id: user_id }),
+      });
+      return api.blocked.list();
     },
-    unblock(user_id: string): Promise<Profile[]> {
-      return mockExtras.unblock(user_id);
+    async unblock(user_id: string): Promise<Profile[]> {
+      if (USING_MOCKS) return mockExtras.unblock(user_id);
+      const session = await neonAuth.getSession();
+      if (!session) throw new ApiError(401, "Not signed in");
+      await dataApi("/blocked_users", {
+        method: "DELETE",
+        query: { blocker_id: `eq.${session.user.id}`, blocked_id: `eq.${user_id}` },
+      });
+      return api.blocked.list();
     },
   },
 
   account: {
-    exportData(): Promise<Blob> {
-      return mockExtras.exportData();
+    async exportData(): Promise<Blob> {
+      if (USING_MOCKS) return mockExtras.exportData();
+      const [profile, conversations, settings] = await Promise.all([
+        api.profiles.me(),
+        api.conversations.list(),
+        api.settings.get().catch(() => DEFAULT_SETTINGS),
+      ]);
+      const messages = await dataApi<Message[]>("/messages", {
+        query: { select: MESSAGE_SELECT, sender_id: `eq.${profile?.id ?? ""}`, order: "created_at.asc" },
+      }).catch(() => [] as Message[]);
+      return new Blob([JSON.stringify({ profile, settings, conversations, messages }, null, 2)], {
+        type: "application/json",
+      });
     },
-    remove(): Promise<{ ok: true }> {
-      return mockExtras.deleteAccount();
+    /** Deleting the profile row cascades to every FluidTalk table via FKs. */
+    async remove(): Promise<{ ok: true }> {
+      if (USING_MOCKS) return mockExtras.deleteAccount();
+      const session = await neonAuth.getSession();
+      if (!session) throw new ApiError(401, "Not signed in");
+      await dataApi("/profiles", { method: "DELETE", query: { id: `eq.${session.user.id}` } });
+      await api.auth.signOut();
+      return { ok: true };
     },
   },
 };
+
+/* ------------------------------------------------------------------ */
+/* Internal helpers                                                    */
+/* ------------------------------------------------------------------ */
+
+interface StatusRow {
+  id: string;
+  user_id: string;
+  media_url: string | null;
+  media_type: StatusMediaType;
+  caption: string | null;
+  created_at: string;
+  expires_at: string;
+  profile: Profile | null;
+  views: { viewer_id: string }[] | null;
+}
+
+const DEFAULT_SETTINGS: UserSettings = {
+  privacy_settings: {
+    last_seen: "everyone",
+    profile_photo: "everyone",
+    status: "contacts",
+    read_receipts: true,
+  },
+  notification_settings: { sound: true, vibration: true, message_preview: true },
+};
+
+async function upsertSettings(next: UserSettings): Promise<UserSettings> {
+  const session = await neonAuth.getSession();
+  if (!session) throw new ApiError(401, "Not signed in");
+  const rows = await dataApi<UserSettings[]>("/user_settings", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    query: { on_conflict: "user_id", select: "privacy_settings,notification_settings" },
+    body: JSON.stringify({
+      user_id: session.user.id,
+      privacy_settings: next.privacy_settings,
+      notification_settings: next.notification_settings,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+  return rows?.[0] ?? next;
+}
