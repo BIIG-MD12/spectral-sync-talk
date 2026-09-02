@@ -38,6 +38,7 @@ export const Route = createFileRoute("/chats/$conversationId")({
 });
 
 function ChatRoom() {
+  useRequireAuth();
   const { conversationId } = Route.useParams();
   const queryClient = useQueryClient();
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -46,7 +47,8 @@ function ChatRoom() {
 
   const setActiveConversation = useAppStore((s) => s.setActiveConversation);
   const currentUser = useAppStore((s) => s.user);
-  const myId = currentUser?.id ?? CURRENT_USER.id;
+  const socketStatus = useAppStore((s) => s.socketStatus);
+  const myId = currentUser?.id ?? "";
 
   useEffect(() => {
     setActiveConversation(conversationId);
@@ -62,15 +64,25 @@ function ChatRoom() {
     queryFn: () => api.conversations.get(conversationId),
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["messages", conversationId],
     queryFn: () => api.conversations.messages(conversationId),
+    // Sockets deliver instantly; otherwise fall back to lightweight polling.
+    refetchInterval: socketStatus === "connected" ? false : POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
   });
 
   const messages = useMemo(() => data?.messages ?? [], [data]);
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const nameFor = (id: string) =>
     conversation?.participants?.find((p) => p.id === id)?.display_name ?? "Member";
+
+  const peer = conversation?.participants?.find((p) => p.id !== myId);
+  const title = conversation
+    ? conversation.is_group
+      ? conversation.title
+      : (peer?.display_name ?? conversation.title)
+    : null;
 
   const send = useMutation({
     mutationFn: ({
@@ -88,11 +100,20 @@ function ChatRoom() {
         reply_to_id: replyTo?.id ?? null,
         scheduled_at: scheduledAt,
       }),
-    onSuccess: () => {
+    onSuccess: (message) => {
       setReplyTo(null);
+      realtime.socket.current?.emit("message:send", message);
       queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
+    onError: (err: Error) => toast.error(err.message || "Message was not sent"),
+  });
+
+  const react = useMutation({
+    mutationFn: ({ id, emoji }: { id: string; emoji: string }) => api.conversations.react(id, emoji),
+    onMutate: ({ id, emoji }) => setLocalReactions((r) => ({ ...r, [id]: emoji })),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["messages", conversationId] }),
+    onError: (err: Error) => toast.error(err.message || "Reaction failed"),
   });
 
   useEffect(() => {
