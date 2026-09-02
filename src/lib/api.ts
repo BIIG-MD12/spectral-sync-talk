@@ -112,14 +112,18 @@ interface ConversationRow {
   participants?: { profile: Profile | null }[] | null;
 }
 
-function toConversation(row: ConversationRow, lastMessage: Message | null): Conversation {
+function toConversation(row: ConversationRow, lastMessage: Message | null, me: string | null): Conversation {
   const participants = (row.participants ?? [])
     .map((p) => p.profile)
     .filter((p): p is Profile => Boolean(p));
+  const others = participants.filter((p) => p.id !== me);
 
   return {
     id: row.id,
-    title: row.title ?? participants[0]?.display_name ?? "Conversation",
+    title:
+      row.title ??
+      (others.length ? others.map((p) => p.display_name).join(", ") : participants[0]?.display_name) ??
+      "Conversation",
     is_group: Boolean(row.is_group),
     created_at: row.created_at,
     last_message: lastMessage,
@@ -255,6 +259,7 @@ export const api = {
     /** Conversations visible to the authenticated identity (RLS-scoped). */
     async list(): Promise<Conversation[]> {
       if (USING_MOCKS) return mockApi.listConversations();
+      const me = (await neonAuth.getSession())?.user.id ?? null;
 
       const rows = await dataApi<ConversationRow[]>("/conversations", {
         query: { select: CONVERSATION_SELECT, order: "created_at.desc" },
@@ -277,7 +282,7 @@ export const api = {
       }
 
       return rows
-        .map((row) => toConversation(row, latest.get(row.id) ?? null))
+        .map((row) => toConversation(row, latest.get(row.id) ?? null, me))
         .sort(
           (a, b) =>
             new Date(b.last_message?.created_at ?? b.created_at).getTime() -
@@ -292,7 +297,8 @@ export const api = {
         id: `eq.${id}`,
       });
       if (!row) throw new ApiError(404, "Conversation not found");
-      return toConversation(row, null);
+      const me = (await neonAuth.getSession())?.user.id ?? null;
+      return toConversation(row, null, me);
     },
 
     /** Keyset pagination on created_at (cursor = oldest loaded created_at). */
