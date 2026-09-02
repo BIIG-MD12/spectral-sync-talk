@@ -11,8 +11,8 @@ export function ConnectionError({
   detail,
 }: {
   onRetry: () => void;
-  title?: string;
-  body?: string;
+  title?: string | undefined;
+  body?: string | undefined;
   detail?: string | undefined;
 }) {
   return (
