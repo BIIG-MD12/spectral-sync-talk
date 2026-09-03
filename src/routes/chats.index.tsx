@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { Archive, Loader2, Search } from "lucide-react";
+import { Archive, Loader2, Search, SquarePen } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { ConnectionError } from "@/components/fluid/ConnectionError";
+import { NewChatSheet } from "@/components/fluid/NewChatSheet";
 import { useAppStore } from "@/store/useAppStore";
 import { useRealtime } from "@/hooks/useRealtime";
+import { useRequireAuth } from "@/hooks/useSession";
 import type { Conversation } from "@/types";
 import { cn } from "@/lib/utils";
 
