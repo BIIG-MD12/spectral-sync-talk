@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CallsRouteImport } from './routes/calls'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as ChatsIndexRouteImport } from './routes/chats.index'
 import { Route as ChatsConversationIdRouteImport } from './routes/chats.$conversationId'
@@ -29,6 +30,11 @@ const CallsRoute = CallsRouteImport.update({
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StatusRoute = StatusRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/calls': typeof CallsRoute
   '/profile': typeof ProfileRoute
+  '/settings': typeof SettingsRoute
   '/status': typeof StatusRoute
   '/chats/$conversationId': typeof ChatsConversationIdRoute
   '/chats/': typeof ChatsIndexRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/calls': typeof CallsRoute
   '/profile': typeof ProfileRoute
+  '/settings': typeof SettingsRoute
   '/status': typeof StatusRoute
   '/chats/$conversationId': typeof ChatsConversationIdRoute
   '/chats': typeof ChatsIndexRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/calls': typeof CallsRoute
   '/profile': typeof ProfileRoute
+  '/settings': typeof SettingsRoute
   '/status': typeof StatusRoute
   '/chats/$conversationId': typeof ChatsConversationIdRoute
   '/chats/': typeof ChatsIndexRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/calls'
     | '/profile'
+    | '/settings'
     | '/status'
     | '/chats/$conversationId'
     | '/chats/'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/calls'
     | '/profile'
+    | '/settings'
     | '/status'
     | '/chats/$conversationId'
     | '/chats'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/calls'
     | '/profile'
+    | '/settings'
     | '/status'
     | '/chats/$conversationId'
     | '/chats/'
@@ -103,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CallsRoute: typeof CallsRoute
   ProfileRoute: typeof ProfileRoute
+  SettingsRoute: typeof SettingsRoute
   StatusRoute: typeof StatusRoute
   ChatsConversationIdRoute: typeof ChatsConversationIdRoute
   ChatsIndexRoute: typeof ChatsIndexRoute
@@ -129,6 +142,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/status': {
@@ -159,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CallsRoute: CallsRoute,
   ProfileRoute: ProfileRoute,
+  SettingsRoute: SettingsRoute,
   StatusRoute: StatusRoute,
   ChatsConversationIdRoute: ChatsConversationIdRoute,
   ChatsIndexRoute: ChatsIndexRoute,

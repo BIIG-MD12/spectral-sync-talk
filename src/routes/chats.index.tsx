@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { Archive, Loader2, Search } from "lucide-react";
+import { Archive, Loader2, Search, SquarePen } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { ConnectionError } from "@/components/fluid/ConnectionError";
+import { NewChatSheet } from "@/components/fluid/NewChatSheet";
 import { useAppStore } from "@/store/useAppStore";
 import { useRealtime } from "@/hooks/useRealtime";
+import { useRequireAuth } from "@/hooks/useSession";
 import type { Conversation } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -43,15 +45,19 @@ function relative(iso?: string | null) {
 }
 
 function ChatList() {
+  const session = useRequireAuth();
   const realtime = useRealtime(null);
   const [archived, setArchived] = useState<string[]>([]);
   const [q, setQ] = useState("");
+  const [newChatOpen, setNewChatOpen] = useState(false);
   const unreadCounts = useAppStore((s) => s.unreadCounts);
   const socketStatus = useAppStore((s) => s.socketStatus);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["conversations"],
     queryFn: () => api.conversations.list(),
+    enabled: session.isAuthenticated,
+    refetchInterval: socketStatus === "connected" ? false : 6000,
   });
 
   const list = (data ?? [])
@@ -59,11 +65,22 @@ function ChatList() {
     .filter((c) => c.title.toLowerCase().includes(q.toLowerCase()));
 
   return (
-    <main className="relative min-h-screen bg-background pb-10">
+    <main className="relative min-h-screen bg-background pb-28">
       <div className="halo pointer-events-none absolute inset-x-0 top-0 h-72" />
 
       <header className="relative z-10 px-5 pb-3 pt-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-glow">Messages</h1>
+        <div className="flex items-start justify-between">
+          <h1 className="text-3xl font-semibold tracking-tight text-glow">Messages</h1>
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            transition={SPRING}
+            aria-label="New chat"
+            onClick={() => setNewChatOpen(true)}
+            className="glass-panel grid size-10 place-items-center rounded-full text-primary"
+          >
+            <SquarePen className="size-[18px]" />
+          </motion.button>
+        </div>
         <p className="mt-1 text-[12px] text-muted-foreground">
           {socketStatus === "connected"
             ? "Live"
@@ -71,7 +88,7 @@ function ChatList() {
               ? "Connecting…"
               : socketStatus === "error"
                 ? "Live updates paused"
-                : "Ready"}{" "}
+                : "Syncing"}{" "}
           · swipe a card to archive
         </p>
         <div className="mt-4 flex items-center gap-2 rounded-2xl bg-glass px-4 py-2.5">
@@ -99,10 +116,36 @@ function ChatList() {
         </div>
       )}
 
-      {isLoading && (
+      {isError && !realtime.isError && (
+        <div className="relative z-10 pb-2">
+          <ConnectionError detail={(error as Error)?.message} onRetry={() => void refetch()} />
+        </div>
+      )}
+
+      {(isLoading || session.isLoading) && (
         <div className="flex justify-center py-16">
           <Loader2 className="size-5 animate-spin text-primary" />
         </div>
+      )}
+
+      {!isLoading && !isError && data && data.length === 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={SPRING}
+          className="glass-panel mx-4 rounded-3xl px-5 py-8 text-center"
+        >
+          <p className="text-[15px] font-medium">No conversations yet</p>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            Start a chat with someone on FluidTalk.
+          </p>
+          <button
+            onClick={() => setNewChatOpen(true)}
+            className="mt-4 rounded-2xl bg-primary px-5 py-2.5 text-[14px] font-medium text-primary-foreground"
+          >
+            New chat
+          </button>
+        </motion.div>
       )}
 
       <ul className="relative z-10 space-y-2 px-3">
@@ -118,9 +161,12 @@ function ChatList() {
           ))}
         </AnimatePresence>
       </ul>
+
+      <NewChatSheet open={newChatOpen} onClose={() => setNewChatOpen(false)} />
     </main>
   );
 }
+
 
 function ConversationCard({
   conversation,
