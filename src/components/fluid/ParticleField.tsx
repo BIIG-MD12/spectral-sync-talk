@@ -30,17 +30,7 @@ export function ParticleField({ count = 28 }: { count?: number }) {
       })),
     );
   }, [count]);
-      Array.from({ length: count }, (_, i) => ({
-        id: i,
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        size: 2 + Math.random() * 5,
-        duration: 9 + Math.random() * 14,
-        delay: Math.random() * 6,
-        drift: (Math.random() - 0.5) * 90,
-      })),
-    [count],
-  );
+
 
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
