@@ -1,10 +1,24 @@
 import { motion } from "framer-motion";
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
+
+type Particle = {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+  duration: number;
+  delay: number;
+  drift: number;
+};
 
 /** Animated ambient particle background used on the auth screen. */
 export function ParticleField({ count = 28 }: { count?: number }) {
-  const particles = useMemo(
-    () =>
+  // Random positions must be generated client-side only to avoid SSR
+  // hydration mismatches.
+  const [particles, setParticles] = useState<Particle[]>([]);
+
+  useEffect(() => {
+    setParticles(
       Array.from({ length: count }, (_, i) => ({
         id: i,
         x: Math.random() * 100,
@@ -14,8 +28,9 @@ export function ParticleField({ count = 28 }: { count?: number }) {
         delay: Math.random() * 6,
         drift: (Math.random() - 0.5) * 90,
       })),
-    [count],
-  );
+    );
+  }, [count]);
+
 
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
