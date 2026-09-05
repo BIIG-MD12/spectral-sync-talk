@@ -21,6 +21,7 @@ import type {
   StatusRingGroup,
   UserSettings,
 } from "@/types";
+import { createCallToken } from "./calls.functions";
 import { mockApi, mockExtras } from "./mock-backend";
 import { authToken, neonAuth } from "./neon-auth";
 import { NEON_DATA_API_URL, NeonNotConfiguredError, USE_MOCKS } from "./neon-config";
@@ -507,13 +508,78 @@ export const api = {
   },
 
   calls: {
-    history(): Promise<CallRecord[]> {
+    async history(): Promise<CallRecord[]> {
       if (USING_MOCKS) return mockExtras.listCalls();
-      return Promise.resolve([]);
+      const session = await neonAuth.getSession();
+      if (!session) return [];
+      const me = session.user.id;
+      type Row = {
+        id: string;
+        caller_id: string;
+        callee_id: string;
+        call_type: CallType;
+        status: CallRecord["status"];
+        duration_seconds: number;
+        started_at: string;
+        caller: Profile | null;
+        callee: Profile | null;
+      };
+      const rows = await dataApi<Row[]>("/calls", {
+        query: {
+          select:
+            "id,caller_id,callee_id,call_type,status,duration_seconds,started_at,caller:profiles!calls_caller_id_fkey(*),callee:profiles!calls_callee_id_fkey(*)",
+          or: `(caller_id.eq.${me},callee_id.eq.${me})`,
+          order: "started_at.desc",
+          limit: 100,
+        },
+      });
+      return (rows ?? [])
+        .map((r) => {
+          const outgoing = r.caller_id === me;
+          const peer = outgoing ? r.callee : r.caller;
+          if (!peer) return null;
+          return {
+            id: r.id,
+            peer,
+            call_type: r.call_type,
+            status: r.status,
+            direction: outgoing ? "outgoing" : "incoming",
+            duration_seconds: r.duration_seconds ?? 0,
+            started_at: r.started_at,
+          } satisfies CallRecord;
+        })
+        .filter((c): c is CallRecord => c !== null);
     },
-    start(peer_id: string, call_type: CallType): Promise<CallToken> {
+    /** Mint a LiveKit token via the server (identity proven by the Neon JWT). */
+    async start(peer_id: string, call_type: CallType, displayName?: string): Promise<CallToken> {
       if (USING_MOCKS) return mockExtras.createCall(peer_id, call_type);
-      return Promise.reject(new ApiError(501, "Calling is not available yet"));
+      const jwt = authToken.get();
+      if (!jwt) throw new ApiError(401, "Not signed in");
+      return createCallToken({
+        data: {
+          peerId: peer_id,
+          callType: call_type,
+          ...(displayName ? { displayName } : {}),
+        },
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+    },
+    /** Persist a call record (caller side) so both users see it in history. */
+    async log(entry: {
+      callee_id: string;
+      call_type: CallType;
+      status: CallRecord["status"];
+      duration_seconds: number;
+      room: string;
+    }): Promise<void> {
+      if (USING_MOCKS) return;
+      const session = await neonAuth.getSession();
+      if (!session) return;
+      await dataApi("/calls", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ caller_id: session.user.id, ...entry }),
+      }).catch(() => undefined);
     },
   },
 
