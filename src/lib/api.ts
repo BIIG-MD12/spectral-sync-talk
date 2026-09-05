@@ -21,6 +21,7 @@ import type {
   StatusRingGroup,
   UserSettings,
 } from "@/types";
+import { createCallToken } from "./calls.functions";
 import { mockApi, mockExtras } from "./mock-backend";
 import { authToken, neonAuth } from "./neon-auth";
 import { NEON_DATA_API_URL, NeonNotConfiguredError, USE_MOCKS } from "./neon-config";
@@ -550,14 +551,16 @@ export const api = {
         .filter((c): c is CallRecord => c !== null);
     },
     /** Mint a LiveKit token via the server (identity proven by the Neon JWT). */
-    async start(peer_id: string, call_type: CallType): Promise<CallToken> {
+    async start(peer_id: string, call_type: CallType, displayName?: string): Promise<CallToken> {
       if (USING_MOCKS) return mockExtras.createCall(peer_id, call_type);
       const jwt = authToken.get();
       if (!jwt) throw new ApiError(401, "Not signed in");
-      const { createCallToken } = await import("./calls.functions");
-      const me = useAppStoreUser();
       return createCallToken({
-        data: { peerId: peer_id, callType: call_type, ...(me ? { displayName: me } : {}) },
+        data: {
+          peerId: peer_id,
+          callType: call_type,
+          ...(displayName ? { displayName } : {}),
+        },
         headers: { Authorization: `Bearer ${jwt}` },
       });
     },

@@ -255,3 +255,30 @@ create policy status_views_select on public.status_views for select to authentic
 drop policy if exists status_views_insert on public.status_views;
 create policy status_views_insert on public.status_views for insert to authenticated
   with check (viewer_id = auth.user_id());
+
+-- ---------------------------------------------------------------------------
+-- Calls (LiveKit voice/video history)
+-- ---------------------------------------------------------------------------
+create table if not exists public.calls (
+  id uuid primary key default gen_random_uuid(),
+  caller_id text not null references public.profiles(id) on delete cascade,
+  callee_id text not null references public.profiles(id) on delete cascade,
+  call_type text not null check (call_type in ('voice','video')),
+  status text not null default 'missed' check (status in ('answered','missed','declined')),
+  duration_seconds integer not null default 0,
+  room text not null,
+  started_at timestamptz not null default now()
+);
+create index if not exists calls_caller_idx on public.calls(caller_id, started_at desc);
+create index if not exists calls_callee_idx on public.calls(callee_id, started_at desc);
+grant select, insert, update on public.calls to authenticated;
+alter table public.calls enable row level security;
+drop policy if exists calls_select on public.calls;
+create policy calls_select on public.calls for select to authenticated
+  using (caller_id = auth.user_id() or callee_id = auth.user_id());
+drop policy if exists calls_insert on public.calls;
+create policy calls_insert on public.calls for insert to authenticated
+  with check (caller_id = auth.user_id());
+drop policy if exists calls_update on public.calls;
+create policy calls_update on public.calls for update to authenticated
+  using (caller_id = auth.user_id() or callee_id = auth.user_id());
