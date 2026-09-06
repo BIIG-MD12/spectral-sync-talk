@@ -55,20 +55,42 @@ function when(iso: string) {
 }
 
 function CallsScreen() {
-  const { data, isLoading } = useQuery({ queryKey: ["calls"], queryFn: () => api.calls.history() });
+  const query = useQuery({ queryKey: ["calls"], queryFn: () => api.calls.history() });
+  const { data, isLoading } = query;
   const peers = Array.from(
     new Map((data ?? []).map((c) => [c.peer.id, c.peer])).values(),
   );
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
+  const [search, setSearch] = useState("");
 
   const dial = async (peerId: string, peerName: string, type: CallType) => {
     setSheetOpen(false);
     try {
-      await api.calls.start(peerId, type);
-      toast.success(`${type === "video" ? "Video" : "Voice"} call with ${peerName}`);
+      const token = await api.calls.start(peerId, type);
+      setActiveCall({
+        token,
+        peer: { id: peerId, display_name: peerName } as CallRecord["peer"],
+        callType: type,
+        direction: "outgoing",
+      });
     } catch {
       toast.error("Could not start the call");
     }
+  };
+
+  const handleCallEnd = async (seconds: number, answered: boolean) => {
+    const call = activeCall;
+    setActiveCall(null);
+    if (!call) return;
+    await api.calls.log({
+      callee_id: call.peer.id,
+      call_type: call.callType,
+      status: answered ? "answered" : "missed",
+      duration_seconds: seconds,
+      room: call.token.room,
+    });
+    await query.refetch();
   };
 
   return (
