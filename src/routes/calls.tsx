@@ -157,10 +157,19 @@ function CallsScreen() {
             >
               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border" />
               <h2 className="mb-3 text-[15px] font-medium">Start a call</h2>
-              <ul className="space-y-2">
+              <div className="mb-3 flex items-center gap-2 rounded-2xl bg-glass px-3 py-2.5">
+                <Search className="size-4 text-muted-foreground" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name or username"
+                  className="flex-1 bg-transparent text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+                />
+              </div>
+              <ul className="space-y-2 max-h-[50vh] overflow-y-auto">
                 {peers.length === 0 && (
                   <li className="rounded-2xl bg-glass px-4 py-6 text-center text-[13px] text-muted-foreground">
-                    No contacts yet
+                    {search.trim().length > 1 ? "No matches" : "No contacts yet"}
                   </li>
                 )}
                 {peers.map((p) => (
