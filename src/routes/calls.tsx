@@ -57,20 +57,32 @@ function when(iso: string) {
 function CallsScreen() {
   const query = useQuery({ queryKey: ["calls"], queryFn: () => api.calls.history() });
   const { data, isLoading } = query;
-  const peers = Array.from(
+  const historyPeers = Array.from(
     new Map((data ?? []).map((c) => [c.peer.id, c.peer])).values(),
   );
   const [sheetOpen, setSheetOpen] = useState(false);
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
   const [search, setSearch] = useState("");
 
+  const { data: searchResults } = useQuery({
+    queryKey: ["profile-search", search.trim()],
+    queryFn: () => api.profiles.search(search.trim()),
+    enabled: sheetOpen && search.trim().length > 1,
+  });
+
+  const peers = Array.from(
+    new Map([...historyPeers, ...(searchResults ?? [])].map((p) => [p.id, p])).values(),
+  ).filter((p) => p.display_name.toLowerCase().includes(search.toLowerCase())
+      || p.username.toLowerCase().includes(search.toLowerCase()));
+
   const dial = async (peerId: string, peerName: string, type: CallType) => {
     setSheetOpen(false);
     try {
       const token = await api.calls.start(peerId, type);
+      const profile = peers.find((p) => p.id === peerId) ?? historyPeers.find((p) => p.id === peerId);
       setActiveCall({
         token,
-        peer: { id: peerId, display_name: peerName } as CallRecord["peer"],
+        peer: profile ?? ({ id: peerId, display_name: peerName } as CallRecord["peer"]),
         callType: type,
         direction: "outgoing",
       });
