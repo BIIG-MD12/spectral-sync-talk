@@ -175,7 +175,11 @@ function ChatRoom() {
                 : "Syncing every few seconds"}
           </p>
         </div>
-        <button className="grid size-9 place-items-center rounded-full bg-glass text-muted-foreground">
+        <button
+          onClick={startVideoCall}
+          className="grid size-9 place-items-center rounded-full bg-glass text-muted-foreground"
+          aria-label="Start video call"
+        >
           <Video className="size-[18px]" />
         </button>
       </motion.header>
