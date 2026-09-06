@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, Loader2, Video } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ActiveCall, CallOverlay } from "@/components/fluid/CallOverlay";
 import { Composer } from "@/components/fluid/Composer";
 import { ConnectionError } from "@/components/fluid/ConnectionError";
 import { MessageBubble } from "@/components/fluid/MessageBubble";
@@ -49,11 +50,35 @@ function ChatRoom() {
   const currentUser = useAppStore((s) => s.user);
   const socketStatus = useAppStore((s) => s.socketStatus);
   const myId = currentUser?.id ?? "";
+  const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
 
   useEffect(() => {
     setActiveConversation(conversationId);
     return () => setActiveConversation(null);
   }, [conversationId, setActiveConversation]);
+
+  const startVideoCall = async () => {
+    if (!peer) return;
+    try {
+      const token = await api.calls.start(peer.id, "video");
+      setActiveCall({ token, peer, callType: "video", direction: "outgoing" });
+    } catch {
+      toast.error("Could not start video call");
+    }
+  };
+
+  const handleCallEnd = async (seconds: number, answered: boolean) => {
+    const call = activeCall;
+    setActiveCall(null);
+    if (!call) return;
+    await api.calls.log({
+      callee_id: call.peer.id,
+      call_type: call.callType,
+      status: answered ? "answered" : "missed",
+      duration_seconds: seconds,
+      room: call.token.room,
+    });
+  };
 
   const realtime = useRealtime(conversationId, {
     onMessage: () => queryClient.invalidateQueries({ queryKey: ["messages", conversationId] }),
@@ -150,7 +175,11 @@ function ChatRoom() {
                 : "Syncing every few seconds"}
           </p>
         </div>
-        <button className="grid size-9 place-items-center rounded-full bg-glass text-muted-foreground">
+        <button
+          onClick={startVideoCall}
+          className="grid size-9 place-items-center rounded-full bg-glass text-muted-foreground"
+          aria-label="Start video call"
+        >
           <Video className="size-[18px]" />
         </button>
       </motion.header>
@@ -217,6 +246,12 @@ function ChatRoom() {
         onCancelReply={() => setReplyTo(null)}
         onSend={(content, effect, scheduledAt) => send.mutate({ content, effect, scheduledAt })}
       />
+
+      <AnimatePresence>
+        {activeCall && (
+          <CallOverlay key={activeCall.token.room} call={activeCall} onEnd={handleCallEnd} />
+        )}
+      </AnimatePresence>
     </main>
   );
 }

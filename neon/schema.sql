@@ -1,12 +1,23 @@
 -- ============================================================================
 -- FluidTalk — Neon schema + Row Level Security
--- Run this once in the Neon SQL Editor (neondb) with the Data API enabled.
+-- Run this once in the Neon SQL Editor (fluiddb) with the Data API enabled.
 -- Identity comes from Neon Auth JWTs: auth.user_id() returns the JWT `sub`.
 -- The browser ONLY ever uses the signed-in user's JWT; these policies decide
 -- what that identity may read or write.
 -- ============================================================================
 
 create extension if not exists pgcrypto;
+
+-- PostgREST exposes the JWT `sub` claim through request.jwt.claims.
+-- We expose it as auth.user_id() so RLS policies read the signed-in identity.
+create schema if not exists auth;
+create or replace function auth.user_id()
+returns text
+language sql stable
+set search_path = public
+as $$
+  select nullif((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'), '');
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Tables

@@ -1,0 +1,20 @@
+{
+  "name": "fluidtalk-realtime",
+  "version": "1.0.0",
+  "description": "FluidTalk realtime socket server for live messages, typing and presence.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "jose": "^5.9.6",
+    "socket.io": "^4.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

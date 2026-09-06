@@ -7,11 +7,13 @@ import {
   PhoneMissed,
   PhoneOutgoing,
   Plus,
+  Search,
   Video,
   Phone as PhoneIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ActiveCall, CallOverlay } from "@/components/fluid/CallOverlay";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { CallRecord, CallType } from "@/types";
@@ -53,20 +55,54 @@ function when(iso: string) {
 }
 
 function CallsScreen() {
-  const { data, isLoading } = useQuery({ queryKey: ["calls"], queryFn: () => api.calls.history() });
-  const peers = Array.from(
+  const query = useQuery({ queryKey: ["calls"], queryFn: () => api.calls.history() });
+  const { data, isLoading } = query;
+  const historyPeers = Array.from(
     new Map((data ?? []).map((c) => [c.peer.id, c.peer])).values(),
   );
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
+  const [search, setSearch] = useState("");
+
+  const { data: searchResults } = useQuery({
+    queryKey: ["profile-search", search.trim()],
+    queryFn: () => api.profiles.search(search.trim()),
+    enabled: sheetOpen && search.trim().length > 1,
+  });
+
+  const peers = Array.from(
+    new Map([...historyPeers, ...(searchResults ?? [])].map((p) => [p.id, p])).values(),
+  ).filter((p) => p.display_name.toLowerCase().includes(search.toLowerCase())
+      || p.username.toLowerCase().includes(search.toLowerCase()));
 
   const dial = async (peerId: string, peerName: string, type: CallType) => {
     setSheetOpen(false);
     try {
-      await api.calls.start(peerId, type);
-      toast.success(`${type === "video" ? "Video" : "Voice"} call with ${peerName}`);
+      const token = await api.calls.start(peerId, type);
+      const profile = peers.find((p) => p.id === peerId) ?? historyPeers.find((p) => p.id === peerId);
+      setActiveCall({
+        token,
+        peer: profile ?? ({ id: peerId, display_name: peerName } as CallRecord["peer"]),
+        callType: type,
+        direction: "outgoing",
+      });
     } catch {
       toast.error("Could not start the call");
     }
+  };
+
+  const handleCallEnd = async (seconds: number, answered: boolean) => {
+    const call = activeCall;
+    setActiveCall(null);
+    if (!call) return;
+    await api.calls.log({
+      callee_id: call.peer.id,
+      call_type: call.callType,
+      status: answered ? "answered" : "missed",
+      duration_seconds: seconds,
+      room: call.token.room,
+    });
+    await query.refetch();
   };
 
   return (
@@ -121,10 +157,19 @@ function CallsScreen() {
             >
               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-border" />
               <h2 className="mb-3 text-[15px] font-medium">Start a call</h2>
-              <ul className="space-y-2">
+              <div className="mb-3 flex items-center gap-2 rounded-2xl bg-glass px-3 py-2.5">
+                <Search className="size-4 text-muted-foreground" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name or username"
+                  className="flex-1 bg-transparent text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+                />
+              </div>
+              <ul className="space-y-2 max-h-[50vh] overflow-y-auto">
                 {peers.length === 0 && (
                   <li className="rounded-2xl bg-glass px-4 py-6 text-center text-[13px] text-muted-foreground">
-                    No contacts yet
+                    {search.trim().length > 1 ? "No matches" : "No contacts yet"}
                   </li>
                 )}
                 {peers.map((p) => (
@@ -155,6 +200,16 @@ function CallsScreen() {
               </ul>
             </motion.div>
           </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activeCall && (
+          <CallOverlay
+            key={activeCall.token.room}
+            call={activeCall}
+            onEnd={handleCallEnd}
+          />
         )}
       </AnimatePresence>
     </main>
