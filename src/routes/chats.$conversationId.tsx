@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, Loader2, Video } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ActiveCall, CallOverlay } from "@/components/fluid/CallOverlay";
 import { Composer } from "@/components/fluid/Composer";
 import { ConnectionError } from "@/components/fluid/ConnectionError";
 import { MessageBubble } from "@/components/fluid/MessageBubble";
