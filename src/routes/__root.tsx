@@ -117,15 +117,17 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+import { useSession } from "@/hooks/useSession"; // Make sure this import exists at the top
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useSession(); // ← ADD THIS LINE HERE
   const user = useAppStore((s) => s.user);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const showTabBar = Boolean(user) && pathname !== "/";
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
       {showTabBar && <TabBar />}
     </QueryClientProvider>
