@@ -20,7 +20,7 @@ export function roomFor(a: string, b: string) {
  * published JWKS — never trusted from the request body.
  */
 export const createCallToken = createServerFn({ method: "POST" })
-  .inputValidator((data) => input.parse(data))
+  .validator({ adapter: (data) => input.parse(data) })
   .handler(async ({ data }): Promise<CallToken> => {
     const url = process.env["LIVEKIT_URL"];
     const apiKey = process.env["LIVEKIT_API_KEY"];
