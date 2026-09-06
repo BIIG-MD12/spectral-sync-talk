@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Loader2, Mail } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react"; // ← Added useEffect here
 import { toast } from "sonner";
 import { ParticleField } from "@/components/fluid/ParticleField";
 import { api, authToken } from "@/lib/api";
 import { useAppStore } from "@/store/useAppStore";
+import { useSession } from "@/hooks/useSession"; // ← Added useSession import
 
 const SPRING = { type: "spring", stiffness: 300, damping: 25 } as const;
 
@@ -31,6 +32,18 @@ export const Route = createFileRoute("/")({
 function AuthScreen() {
   const navigate = useNavigate();
   const setSession = useAppStore((s) => s.setSession);
+  
+  // ✅ NEW: Check if user is already logged in
+  const user = useAppStore((s) => s.user);
+  const { isLoading } = useSession();
+
+  // ✅ NEW: Redirect to chats if already logged in
+  useEffect(() => {
+    if (!isLoading && user) {
+      navigate({ to: "/chats", replace: true });
+    }
+  }, [isLoading, user, navigate]);
+
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -45,7 +58,7 @@ function AuthScreen() {
     try {
       const res = await api.auth.emailOtp(email);
       if (res.requiresOtp) setStep("otp");
-      toast.success("Code sent — use any 6 digits in demo mode");
+      toast.success("Code sent — check your email");
     } catch {
       toast.error("Could not send code");
     } finally {
