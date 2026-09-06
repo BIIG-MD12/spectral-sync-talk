@@ -246,6 +246,12 @@ function ChatRoom() {
         onCancelReply={() => setReplyTo(null)}
         onSend={(content, effect, scheduledAt) => send.mutate({ content, effect, scheduledAt })}
       />
+
+      <AnimatePresence>
+        {activeCall && (
+          <CallOverlay key={activeCall.token.room} call={activeCall} onEnd={handleCallEnd} />
+        )}
+      </AnimatePresence>
     </main>
   );
 }
