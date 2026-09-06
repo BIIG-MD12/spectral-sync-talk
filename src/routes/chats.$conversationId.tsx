@@ -50,11 +50,35 @@ function ChatRoom() {
   const currentUser = useAppStore((s) => s.user);
   const socketStatus = useAppStore((s) => s.socketStatus);
   const myId = currentUser?.id ?? "";
+  const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
 
   useEffect(() => {
     setActiveConversation(conversationId);
     return () => setActiveConversation(null);
   }, [conversationId, setActiveConversation]);
+
+  const startVideoCall = async () => {
+    if (!peer) return;
+    try {
+      const token = await api.calls.start(peer.id, "video");
+      setActiveCall({ token, peer, callType: "video", direction: "outgoing" });
+    } catch {
+      toast.error("Could not start video call");
+    }
+  };
+
+  const handleCallEnd = async (seconds: number, answered: boolean) => {
+    const call = activeCall;
+    setActiveCall(null);
+    if (!call) return;
+    await api.calls.log({
+      callee_id: call.peer.id,
+      call_type: call.callType,
+      status: answered ? "answered" : "missed",
+      duration_seconds: seconds,
+      room: call.token.room,
+    });
+  };
 
   const realtime = useRealtime(conversationId, {
     onMessage: () => queryClient.invalidateQueries({ queryKey: ["messages", conversationId] }),
