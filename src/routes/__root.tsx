@@ -14,6 +14,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { TabBar } from "@/components/fluid/TabBar";
 import { useAppStore } from "@/store/useAppStore";
+import { useSession } from "@/hooks/useSession";
 
 function NotFoundComponent() {
   return (
@@ -117,11 +118,9 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
-import { useSession } from "@/hooks/useSession"; // Make sure this import exists at the top
-
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-  useSession(); // ← ADD THIS LINE HERE
+  useSession();
   const user = useAppStore((s) => s.user);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const showTabBar = Boolean(user) && pathname !== "/";
